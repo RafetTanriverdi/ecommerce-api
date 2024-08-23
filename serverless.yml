@@ -1,0 +1,91 @@
+useDotenv: true
+org: rafet
+app: rafet-test-api
+service: eCommerceApp
+
+stages:
+  default:
+    params:
+      customersTableName: "customers-table-${sls:stage}"
+      ordersTableName: "orders-table-${sls:stage}"
+
+plugins:
+  - serverless-dotenv-plugin
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  stage: dev
+  region: us-east-1
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+          Resource:
+            - Fn::GetAtt: [CustomersTable, Arn]
+            - arn:aws:dynamodb:${self:provider.region}:*:table/products-table-dev
+            - Fn::GetAtt: [OrdersTable, Arn]
+            - arn:aws:dynamodb:${self:provider.region}:*:table/orders-table-dev
+  environment:
+    CUSTOMER_TABLE: ${param:customersTableName}
+    PRODUCTS_TABLE: "products-table-dev"
+    ORDERS_TABLE: ${param:ordersTableName}
+
+functions:
+  api:
+    handler: handler.handler
+    events:
+      - http:
+          path: products
+          method: get
+          cors:
+            origin: "*"
+            headers:
+              - Content-Type
+      - http:
+          path: products/:productId
+          method: get
+          cors:
+            origin: "*"
+            headers:
+              - Content-Type
+      - http:
+          path: checkout
+          method: post
+          cors:
+            origin: "*"
+            headers:
+              - Content-Type
+
+resources:
+  Resources:
+    CustomersTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        AttributeDefinitions:
+          - AttributeName: customerId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: customerId
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
+        TableName: ${param:customersTableName}
+
+    OrdersTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        AttributeDefinitions:
+          - AttributeName: orderId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: orderId
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
+        TableName: ${param:ordersTableName}
