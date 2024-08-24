@@ -33,10 +33,13 @@ provider:
             - arn:aws:dynamodb:${self:provider.region}:*:table/products-table-dev
             - Fn::GetAtt: [OrdersTable, Arn]
             - arn:aws:dynamodb:${self:provider.region}:*:table/orders-table-dev
+
   environment:
     CUSTOMER_TABLE: ${param:customersTableName}
     PRODUCTS_TABLE: "products-table-dev"
     ORDERS_TABLE: ${param:ordersTableName}
+    STRIPE_SECRET_KEY: ${env:STRIPE_SECRET_KEY}
+    STRIPE_WEBHOOK_SECRET: ${env:STRIPE_WEBHOOK_SECRET}
 
 functions:
   api:
@@ -45,24 +48,20 @@ functions:
       - http:
           path: products
           method: get
-          cors:
-            origin: "*"
-            headers:
-              - Content-Type
+          cors: true
       - http:
-          path: products/:productId
+          path: products/{productId}
           method: get
-          cors:
-            origin: "*"
-            headers:
-              - Content-Type
+          cors: true
       - http:
           path: checkout
           method: post
-          cors:
-            origin: "*"
-            headers:
-              - Content-Type
+          cors: true
+      - http:
+          path: webhook
+          method: post
+          cors: true
+          integration: lambda-proxy
 
 resources:
   Resources:

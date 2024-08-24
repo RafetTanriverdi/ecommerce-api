@@ -1,8 +1,10 @@
 const express = require("express");
 const serverless = require("serverless-http");
 
-const productRoute = require('./routes/productsRoute');
-const checkoutRoute = require('./routes/checkoutRoute');
+const productRoute = require("./routes/productsRoute");
+const checkoutRoute = require("./routes/checkoutRoute");
+const ordersRoute = require("./routes/ordersRoute");
+const checkoutController = require("./controllers/checkoutController");
 const app = express();
 
 app.use(express.json());
@@ -22,9 +24,15 @@ app.use((req, res, next) => {
 });
 
 // Routes
+app.post(
+  "/webhook",
+    express.raw({ type: 'application/json' }), // Ham JSON olarak alıyoruz
+  checkoutController.PostWebhook
+);
 
-app.use('/products',productRoute);
-app.use('/checkout',checkoutRoute);
+app.use("/products", productRoute);
+app.use("/checkout", checkoutRoute);
+app.use("/orders", ordersRoute);
 
 app.use((req, res, next) => {
   return res.status(404).json({
