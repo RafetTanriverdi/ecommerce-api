@@ -37,9 +37,11 @@ provider:
   environment:
     CUSTOMER_TABLE: ${param:customersTableName}
     PRODUCTS_TABLE: "products-table-dev"
+    CATEGORIES_TABLE: "categories-table-dev"
     ORDERS_TABLE: ${param:ordersTableName}
     STRIPE_SECRET_KEY: ${env:STRIPE_SECRET_KEY}
     STRIPE_WEBHOOK_SECRET: ${env:STRIPE_WEBHOOK_SECRET}
+    USER_POOL_ID: ${env:USER_POOL_ID}    
 
 functions:
   api:
@@ -62,6 +64,18 @@ functions:
           method: post
           cors: true
           integration: lambda-proxy
+      - http:
+          path: orders
+          method: get
+          cors: true
+      - http:
+          path: orders/{orderId}
+          method: get
+          cors: true
+      - http:
+          path: categories
+          method: get
+          cors: true
 
 resources:
   Resources:

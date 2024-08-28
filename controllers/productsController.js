@@ -10,17 +10,27 @@ const docClient = DynamoDBDocumentClient.from(client);
 const PRODUCTS_TABLE = process.env.PRODUCTS_TABLE;
 
 exports.ListProducts = async (req, res) => {
+  const categoryId = req.query.categoryId;
+
   try {
-    const params = {
+    let params = {
       TableName: PRODUCTS_TABLE,
       ProjectionExpression:
-        "productId, productName, price, description, stock, imageUrl,stripePriceId,createdAt",
+        "productId, productName, price, description, stock, imageUrls, stripePriceId, createdAt, categoryId",
     };
 
     const data = await docClient.send(new ScanCommand(params));
-    res.status(200).json(data.Items);
+
+    if (categoryId) {
+      const filteredItems = data.Items.filter(
+        (item) =>
+          item.categoryId && item.categoryId.trim() === categoryId.trim()
+      );
+      return res.status(200).json(filteredItems);
+    } else if (!categoryId) {
+      return res.status(200).json(data.Items);
+    }
   } catch (err) {
-    console.error("Error fetching products:", err);
     res.status(500).json({ error: "Could not fetch products" });
   }
 };
@@ -34,7 +44,7 @@ exports.GetProduct = async (req, res) => {
         productId: productId,
       },
       ProjectionExpression:
-        "productId, productName, price, description, stock, imageUrl,stripePriceId,createdAt",
+        "productId, productName, price, description, stock, imageUrls,stripePriceId,createdAt",
     };
 
     const { Item } = await docClient.send(new GetCommand(params));
