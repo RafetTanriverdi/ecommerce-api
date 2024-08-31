@@ -13,31 +13,86 @@ const CUSTOMERS_TABLE = process.env.CUSTOMER_TABLE;
 const PRODUCTS_TABLE = process.env.PRODUCTS_TABLE;
 const ORDERS_TABLE = process.env.ORDERS_TABLE;
 
-exports.PostCheckOutStripe = async (req, res) => {
-  console.log("res", res);
-  console.log("req", req);
+// exports.PostCheckOutStripe = async (req, res) => {
+//   console.log("res", res);
+//   console.log("req", req);
 
-  const { priceId, quantity, return_url } = req.body;
+//   const { lineItems, returnUrl, shippingAddress } = req.body;
+
+//   try {
+//     const session = await stripe.checkout.sessions.create({
+//       ui_mode: "embedded",
+//       return_url: returnUrl,
+//       line_items: lineItems,
+//       allow_promotion_codes: true,
+//       shipping_address_collection: {
+//         allowed_countries: ["US", "TR", "CA"],
+//       },
+
+//       // shipping: {
+//       //   address: {
+//       //     country: shippingAddress.country,
+//       //     city: shippingAddress.city,
+//       //     line1: shippingAddress.line1,
+//       //     line2: shippingAddress.line2,
+//       //     postal_code: shippingAddress.postal_code,
+//       //     state: shippingAddress.state,
+//       //   },
+//       //   name: shippingAddress.name,
+//       // },
+
+//       mode: "payment",
+//     });
+//     console.log("session", session);
+//     res.status(200).json({ session: session });
+//   } catch (error) {
+//     res.status(error.statusCode || 500).json({ message: error.message });
+//   }
+// };
+
+
+exports.PostCheckOutStripe = async (req, res) => {
+  const { lineItems, shippingAddress } = req.body;
+
+  // Toplam tutarı hesaplayın (örnek)
+  const calculateOrderAmount = (items) => {
+    let total = 0;
+    for (const item of items) {
+      if (typeof item.price !== 'number' || typeof item.quantity !== 'number') {
+        throw new Error("Invalid data type: Price and Quantity must be numbers");
+      }
+      total += item.price * item.quantity;
+    }
+    return total * 100;  
+  };
+  
 
   try {
-    const session = await stripe.checkout.sessions.create({
-      ui_mode: "embedded",
-      return_url: return_url,
-      line_items: [
-        {
-          price: priceId,
-          quantity: quantity,
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: calculateOrderAmount(lineItems),
+      currency: 'usd',
+      shipping: {
+        name: shippingAddress.name,
+        address: {
+          line1: shippingAddress.line1,
+          line2: shippingAddress.line2,
+          city: shippingAddress.city,
+          state: shippingAddress.state,
+          postal_code: shippingAddress.postal_code,
+          country: shippingAddress.country,
         },
-      ],
-      mode: "payment",
+      },
+      metadata: {
+        // Ekstra bilgileri buraya ekleyebilirsiniz
+      },
     });
-    console.log("session", session);
-    res.status(200).json({ session: session });
+
+    res.status(200).json({ clientSecret: paymentIntent.client_secret });
   } catch (error) {
-    res.status(error.statusCode || 500).json({ message: error.message });
+    console.error("PaymentIntent oluşturulurken hata:", error);
+    res.status(500).json({ error: error.message });
   }
 };
-
 exports.PostWebhook = async (req, res) => {
   let event = req.body;
 
@@ -117,6 +172,7 @@ exports.PostWebhook = async (req, res) => {
         productPrice: productData.price,
         quantity: lineItems.data[0].quantity,
         priceId: lineItems.data[0].price.id,
+        productImage: productData.imageUrls,
       };
 
       const orderParams = {
