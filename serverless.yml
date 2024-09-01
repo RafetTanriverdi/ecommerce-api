@@ -76,6 +76,15 @@ functions:
           path: categories
           method: get
           cors: true
+      - http:
+          path: profile
+          method: get
+          cors: true
+      - http:
+          path: profile
+          method: patch
+          cors: true
+          
 
 resources:
   Resources:

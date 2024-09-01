@@ -13,87 +13,44 @@ const CUSTOMERS_TABLE = process.env.CUSTOMER_TABLE;
 const PRODUCTS_TABLE = process.env.PRODUCTS_TABLE;
 const ORDERS_TABLE = process.env.ORDERS_TABLE;
 
-// exports.PostCheckOutStripe = async (req, res) => {
-//   console.log("res", res);
-//   console.log("req", req);
-
-//   const { lineItems, returnUrl, shippingAddress } = req.body;
-
-//   try {
-//     const session = await stripe.checkout.sessions.create({
-//       ui_mode: "embedded",
-//       return_url: returnUrl,
-//       line_items: lineItems,
-//       allow_promotion_codes: true,
-//       shipping_address_collection: {
-//         allowed_countries: ["US", "TR", "CA"],
-//       },
-
-//       // shipping: {
-//       //   address: {
-//       //     country: shippingAddress.country,
-//       //     city: shippingAddress.city,
-//       //     line1: shippingAddress.line1,
-//       //     line2: shippingAddress.line2,
-//       //     postal_code: shippingAddress.postal_code,
-//       //     state: shippingAddress.state,
-//       //   },
-//       //   name: shippingAddress.name,
-//       // },
-
-//       mode: "payment",
-//     });
-//     console.log("session", session);
-//     res.status(200).json({ session: session });
-//   } catch (error) {
-//     res.status(error.statusCode || 500).json({ message: error.message });
-//   }
-// };
-
-
 exports.PostCheckOutStripe = async (req, res) => {
-  const { lineItems, shippingAddress } = req.body;
+  console.log("res", res);
+  console.log("req", req);
 
-  // Toplam tutarı hesaplayın (örnek)
-  const calculateOrderAmount = (items) => {
-    let total = 0;
-    for (const item of items) {
-      if (typeof item.price !== 'number' || typeof item.quantity !== 'number') {
-        throw new Error("Invalid data type: Price and Quantity must be numbers");
-      }
-      total += item.price * item.quantity;
-    }
-    return total * 100;  
-  };
-  
+  const { lineItems, returnUrl, shippingAddress, customerEmail, customer } =
+    req.body;
 
   try {
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: calculateOrderAmount(lineItems),
-      currency: 'usd',
-      shipping: {
-        name: shippingAddress.name,
-        address: {
-          line1: shippingAddress.line1,
-          line2: shippingAddress.line2,
-          city: shippingAddress.city,
-          state: shippingAddress.state,
-          postal_code: shippingAddress.postal_code,
-          country: shippingAddress.country,
-        },
+    const sessionConfig = {
+      ui_mode: "embedded",
+      return_url: returnUrl,
+      line_items: lineItems,
+      allow_promotion_codes: true,
+      shipping_address_collection: {
+        allowed_countries: ["US", "TR", "CA"],
       },
-      metadata: {
-        // Ekstra bilgileri buraya ekleyebilirsiniz
-      },
-    });
+      mode: "payment",
+    };
 
-    res.status(200).json({ clientSecret: paymentIntent.client_secret });
+    // Conditionally add either customer or customer_email
+    if (customer) {
+      sessionConfig.customer = customer;
+    } else if (customerEmail) {
+      sessionConfig.customer_email = customerEmail;
+    }
+
+    const session = await stripe.checkout.sessions.create(sessionConfig);
+    console.log("session", session);
+    res.status(200).json({ session: session });
   } catch (error) {
-    console.error("PaymentIntent oluşturulurken hata:", error);
-    res.status(500).json({ error: error.message });
+    res.status(error.statusCode || 500).json({ message: error.message });
   }
 };
+
+
+
 exports.PostWebhook = async (req, res) => {
+  console.log("req.body", req.body);
   let event = req.body;
 
   let orderData = {};
@@ -104,35 +61,9 @@ exports.PostWebhook = async (req, res) => {
       const lineItems = await stripe.checkout.sessions.listLineItems(
         session.id,
         {
-          limit: 10, // Satın alınan tüm ürünleri görmek için limiti artırabilirsiniz
+          limit: 10, 
         }
       );
-
-      const priceId = lineItems.data[0].price.id;
-
-      console.log("Satılan ürünün Price ID:", priceId);
-      let productData;
-      const productParams = {
-        TableName: PRODUCTS_TABLE,
-        FilterExpression: "stripePriceId = :stripePriceId",
-        ExpressionAttributeValues: {
-          ":stripePriceId": priceId,
-        },
-      };
-      try {
-        const productResponse = await docClient.send(
-          new ScanCommand(productParams)
-        );
-        console.log("customerResponse", productResponse);
-        if (productResponse.Items.length === 0) {
-          console.error("Product not found.");
-          return res.status(404).json({ error: "Product not found" });
-        }
-        productData = productResponse.Items[0];
-      } catch (err) {
-        console.error("Error fetching Product:", err);
-        return res.status(500).json({ error: "Could not fetch Product" });
-      }
 
       let customerData;
       const customerParams = {
@@ -157,6 +88,43 @@ exports.PostWebhook = async (req, res) => {
         return res.status(500).json({ error: "Could not fetch customer" });
       }
 
+      const products = await Promise.all(
+        lineItems.data.map(async (item) => {
+          let productData;
+          const productParams = {
+            TableName: PRODUCTS_TABLE,
+            FilterExpression: "stripePriceId = :stripePriceId",
+            ExpressionAttributeValues: {
+              ":stripePriceId": item.price.id,
+            },
+          };
+          try {
+            const productResponse = await docClient.send(
+              new ScanCommand(productParams)
+            );
+            if (productResponse.Items.length === 0) {
+              console.error("Product not found.");
+              return null;
+            }
+            productData = productResponse.Items[0];
+          } catch (err) {
+            console.error("Error fetching Product:", err);
+            return null;
+          }
+
+          return {
+            productId: productData.productId,
+            productName: productData.productName,
+            productPrice: productData.price,
+            quantity: item.quantity,
+            priceId: item.price.id,
+            productImage: productData.imageUrls,
+          };
+        })
+      );
+
+      const filteredProducts = products.filter((product) => product !== null);
+
       orderData = {
         orderId: session.id,
         customerId: customerData.customerId,
@@ -167,12 +135,7 @@ exports.PostWebhook = async (req, res) => {
         amountTotal: session.amount_total,
         ownerId: customerData.customerId,
         createdAt: new Date().toISOString(),
-        productId: productData.productId,
-        productName: productData.productName,
-        productPrice: productData.price,
-        quantity: lineItems.data[0].quantity,
-        priceId: lineItems.data[0].price.id,
-        productImage: productData.imageUrls,
+        products: filteredProducts, 
       };
 
       const orderParams = {
@@ -198,3 +161,4 @@ exports.PostWebhook = async (req, res) => {
 
   res.status(200).json({ received: true });
 };
+

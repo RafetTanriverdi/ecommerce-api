@@ -6,6 +6,7 @@ const checkoutRoute = require("./routes/checkoutRoute");
 const ordersRoute = require("./routes/ordersRoute");
 const checkoutController = require("./controllers/checkoutController");
 const categoriesRoute = require("./routes/categoriesRoute");
+const profileRoute = require("./routes/profileRoute");
 const app = express();
 
 app.use(express.json());
@@ -35,6 +36,7 @@ app.use("/products", productRoute);
 app.use("/checkout", checkoutRoute);
 app.use("/orders", ordersRoute);
 app.use("/categories",categoriesRoute)
+app.use("/profile", profileRoute);
 
 app.use((req, res, next) => {
   return res.status(404).json({
