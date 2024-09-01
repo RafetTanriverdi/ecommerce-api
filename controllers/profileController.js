@@ -29,10 +29,11 @@ exports.GetProfile = async (req, res) => {
     }
 };
 exports.UpdateProfile = async (req, res) => {
+    console.log("req.body", req);
+
     const customerId = req.user.sub;
-    const { name, email, address, phone } = req.body;
+    const { name, email, address, phone,stripeCustomerId } = req.body;
   
-    // DynamoDB güncelleme parametreleri
     const params = {
       TableName: CUSTOMERS_TABLE,
       Key: { customerId: customerId },
@@ -45,35 +46,31 @@ exports.UpdateProfile = async (req, res) => {
         ":name": name,
         ":email": email,
         ":phone": phone,
-        ":newAddress": [address], // Adresi array olarak ekliyoruz
-        ":emptyList": [], // Eğer adres listesi yoksa boş array oluştur
+        ":newAddress": [address], 
+        ":emptyList": [], 
         ":updatedAt": new Date().toISOString(),
       },
       ReturnValues: "UPDATED_NEW",
     };
   
     try {
-      // DynamoDB'de güncelleme
       const { Attributes } = await docClient.send(new UpdateCommand(params));
   
-      // Stripe'ta müşteri bilgilerini güncelleme
-      await stripe.customers.update(customerId, {
+      await stripe.customers.update(stripeCustomerId, {
         name: name,
         phone: phone,
       });
   
-      // Cognito'da kullanıcı bilgilerini güncelleme
       const cognitoParams = {
         UserAttributes: [
           { Name: "name", Value: name },
           { Name: "phone_number", Value: phone },
         ],
-        UserPoolId: process.env.USER_POOL_ID, // Cognito User Pool ID
-        Username: customerId, // Cognito Username olarak customerId'yi kullanıyoruz
+        UserPoolId: process.env.USER_POOL_ID, 
+        Username: customerId, 
       };
       await cognito.adminUpdateUserAttributes(cognitoParams).promise();
   
-      // Başarılı yanıt döndürme
       res.status(200).json(Attributes);
     } catch (err) {
       console.error("Error updating profile:", err);

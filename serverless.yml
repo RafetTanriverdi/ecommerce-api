@@ -33,7 +33,11 @@ provider:
             - arn:aws:dynamodb:${self:provider.region}:*:table/products-table-dev
             - Fn::GetAtt: [OrdersTable, Arn]
             - arn:aws:dynamodb:${self:provider.region}:*:table/orders-table-dev
-
+        - Effect: Allow
+          Action:
+            - cognito-idp:AdminUpdateUserAttributes
+          Resource:
+            - arn:aws:cognito-idp:${self:provider.region}:${aws:accountId}:userpool/${env:USER_POOL_ID}
   environment:
     CUSTOMER_TABLE: ${param:customersTableName}
     PRODUCTS_TABLE: "products-table-dev"
