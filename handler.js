@@ -34,6 +34,7 @@ app.post(
 
 app.use("/products", productRoute);
 app.use("/checkout", checkoutRoute);
+
 app.use("/orders", ordersRoute);
 app.use("/categories",categoriesRoute)
 app.use("/profile", profileRoute);
