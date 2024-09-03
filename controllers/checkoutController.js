@@ -14,7 +14,7 @@ const PRODUCTS_TABLE = process.env.PRODUCTS_TABLE;
 const ORDERS_TABLE = process.env.ORDERS_TABLE;
 
 exports.PostCheckOutStripe = async (req, res) => {
-  const { lineItems, shippingAddress, customer,customerEmail, promoCode, amount } = req.body;
+  const { orderedItems, shippingAddress, customer, customerEmail, promoCode, amount } = req.body;
 
   try {
     const paymentIntent = await stripe.paymentIntents.create({
@@ -22,7 +22,7 @@ exports.PostCheckOutStripe = async (req, res) => {
       currency: "usd",
       customer: customer,
       metadata: {
-        orderItems: JSON.stringify(lineItems), 
+        orderItems: JSON.stringify(orderedItems), // Store orderedItems in metadata
       },
       receipt_email: customerEmail,
     });
@@ -62,6 +62,7 @@ exports.PostWebhook = async (req, res) => {
     case "payment_intent.succeeded":
       const paymentIntent = event.data.object;
 
+      // Retrieve the customer details based on the customer ID or email
       let customerData;
       const customerParams = {
         TableName: CUSTOMERS_TABLE,
@@ -84,17 +85,26 @@ exports.PostWebhook = async (req, res) => {
         return res.status(500).json({ error: "Could not fetch customer" });
       }
 
-      const lineItems = JSON.parse(paymentIntent.metadata.orderItems);
-      console.log("Line items:", lineItems);
+      let lineItems;
+      try {
+        lineItems = paymentIntent.metadata.orderItems 
+          ? JSON.parse(paymentIntent.metadata.orderItems) 
+          : [];
+        console.log("Line items:", lineItems);
+      } catch (err) {
+        console.error("Error parsing line items:", err.message);
+        return res.status(400).json({ error: "Invalid order items format" });
+      }
 
+      // Fetch the products based on the provided productId and quantity
       const products = await Promise.all(
         lineItems.map(async (item) => {
           let productData;
           const productParams = {
             TableName: PRODUCTS_TABLE,
-            FilterExpression: "stripePriceId = :stripePriceId",
+            FilterExpression: "productId = :productId",
             ExpressionAttributeValues: {
-              ":stripePriceId": item.price,
+              ":productId": item.productId,
             },
           };
           try {

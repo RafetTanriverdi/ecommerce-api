@@ -6,11 +6,13 @@
     "@aws-sdk/client-dynamodb": "^3.585.0",
     "@aws-sdk/lib-dynamodb": "^3.585.0",
     "aws-sdk": "^2.1687.0",
+    "body-parser": "^1.20.2",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
     "jwks-rsa": "^3.1.0",
     "serverless-http": "^3.2.0",
-    "stripe": "^16.8.0"
+    "stripe": "^16.8.0",
+    "uuid": "^10.0.0"
   },
   "devDependencies": {
     "serverless-dotenv-plugin": "^6.0.0"

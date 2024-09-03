@@ -8,6 +8,7 @@ stages:
     params:
       customersTableName: "customers-table-${sls:stage}"
       ordersTableName: "orders-table-${sls:stage}"
+      profilePicturesBucketName: "profile-pictures-${sls:stage}-${self:provider.region}"
 
 plugins:
   - serverless-dotenv-plugin
@@ -17,6 +18,10 @@ provider:
   runtime: nodejs20.x
   stage: dev
   region: us-east-1
+  apiGateway:
+    minimumCompressionSize: 1024 
+    binaryMediaTypes:
+      - "*/*" 
   iam:
     role:
       statements:
@@ -35,17 +40,28 @@ provider:
             - arn:aws:dynamodb:${self:provider.region}:*:table/orders-table-dev
         - Effect: Allow
           Action:
+            - s3:PutObject
+            - s3:GetObject
+            - s3:DeleteObject
+            - s3:ListBucket
+          Resource:
+            - "arn:aws:s3:::${param:profilePicturesBucketName}/*"
+            - "arn:aws:s3:::${param:profilePicturesBucketName}"
+        - Effect: Allow
+          Action:
             - cognito-idp:AdminUpdateUserAttributes
           Resource:
             - arn:aws:cognito-idp:${self:provider.region}:${aws:accountId}:userpool/${env:USER_POOL_ID}
+
   environment:
     CUSTOMER_TABLE: ${param:customersTableName}
     PRODUCTS_TABLE: "products-table-dev"
     CATEGORIES_TABLE: "categories-table-dev"
     ORDERS_TABLE: ${param:ordersTableName}
+    S3_BUCKET_NAME: ${param:profilePicturesBucketName}
     STRIPE_SECRET_KEY: ${env:STRIPE_SECRET_KEY}
     STRIPE_WEBHOOK_SECRET: ${env:STRIPE_WEBHOOK_SECRET}
-    USER_POOL_ID: ${env:USER_POOL_ID}    
+    USER_POOL_ID: ${env:USER_POOL_ID}
 
 functions:
   api:
@@ -88,7 +104,10 @@ functions:
           path: profile
           method: patch
           cors: true
-          
+      - http:
+          path: profile/address
+          method: Put
+          cors: true
 
 resources:
   Resources:
@@ -115,3 +134,21 @@ resources:
             KeyType: HASH
         BillingMode: PAY_PER_REQUEST
         TableName: ${param:ordersTableName}
+
+    ProfilePicturesBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${param:profilePicturesBucketName}
+        AccessControl: Private
+        CorsConfiguration:
+          CorsRules:
+            - AllowedOrigins:
+                - "*"
+              AllowedHeaders:
+                - "*"
+              AllowedMethods:
+                - GET
+                - PUT
+                - POST
+                - DELETE
+              MaxAge: 3000
