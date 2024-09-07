@@ -32,17 +32,17 @@ exports.GetProfile = async (req, res) => {
       return res.status(404).json({ message: "Profile not found" });
     }
 
-    // If a profile picture exists, generate a signed URL
+    // Eğer profil resmi varsa, imzalı URL oluşturuyoruz
     if (Item.profilePicture) {
       const profilePictureUrl = await getSignedUrl(
         s3Client,
         new GetObjectCommand({
           Bucket: process.env.S3_BUCKET_NAME,
-          Key: Item.profilePicture, // The S3 key saved in the user's profile
+          Key: Item.profilePicture,
         }),
-        { expiresIn: 3600 } // URL will expire after 1 hour
+        { expiresIn: 86400 } // 1 saat sonra süresi dolacak
       );
-      Item.profilePictureUrl = profilePictureUrl; // Attach the signed URL to the response
+      Item.profilePictureUrl = profilePictureUrl; // Signed URL ekleniyor
     }
 
     res.status(200).json(Item);
@@ -55,45 +55,55 @@ exports.GetProfile = async (req, res) => {
 
 exports.UpdateProfile = async (req, res) => {
   const customerId = req.user.sub;
-  const { name, email, phone, address, stripeCustomerId, profilePicture } = req.body;
+  const { name, email, phone, stripeCustomerId, profilePicture, cropData } =
+    req.body;
 
   let profilePictureKey;
 
-  // Upload the cropped image to S3
+  // Eğer profil resmi varsa, resmi S3'e yükle
   if (profilePicture) {
-    const buffer = Buffer.from(
-      profilePicture.replace(/^data:image\/\w+;base64,/, ""), // Strip the base64 prefix
-      "base64"
-    );
-    const fileExtension = "jpeg"; // Assuming it's always JPEG; change if needed.
-    const key = `profile-pictures/${customerId}.${fileExtension}`; // Generate S3 key based on customerId.
+    if (profilePicture.startsWith("data:image/")) {
+      const buffer = Buffer.from(
+        profilePicture.replace(/^data:image\/\w+;base64,/, ""), // base64 başlığını kaldırıyoruz
+        "base64"
+      );
 
-    const s3Params = {
-      Bucket: process.env.S3_BUCKET_NAME,
-      Key: key,
-      Body: buffer,
-      ContentEncoding: "base64",
-      ContentType: `image/${fileExtension}`,
-      ACL: "private", // Keep the image private
-    };
+      const fileExtension = "jpeg"; // JPEG olduğunu varsayıyoruz
+      const key = `profile-pictures/${customerId}.${fileExtension}`; // S3 anahtarı oluşturuyoruz
 
-    try {
-      // Upload the image to S3
-      await s3Client.send(new PutObjectCommand(s3Params));
-      profilePictureKey = key; // Save the key to store in DynamoDB
-    } catch (err) {
-      console.error("Error uploading cropped profile picture:", err);
-      return res.status(500).json({ message: "Could not upload profile picture" });
+      const s3Params = {
+        Bucket: process.env.S3_BUCKET_NAME,
+        Key: key,
+        Body: buffer,
+        ContentEncoding: "base64",
+        ContentType: `image/${fileExtension}`,
+        ACL: "private", // Görseli özel tutuyoruz
+      };
+
+      try {
+        await s3Client.send(new PutObjectCommand(s3Params)); // Resmi S3'e yüklüyoruz
+        profilePictureKey = key; // S3 anahtarını kaydediyoruz
+      } catch (err) {
+        console.error("Error uploading profile picture:", err);
+        return res
+          .status(500)
+          .json({ message: "Could not upload profile picture" });
+      }
+    } else {
+      return res
+        .status(400)
+        .json({ message: "Invalid profile picture format, must be base64" });
     }
   }
 
-  // Update the user's profile in DynamoDB
+  // Kullanıcı profilini DynamoDB'de güncelle
   const updateExpression = `
     SET #name = :name, 
         email = :email, 
         phone = :phone, 
         updatedAt = :updatedAt
         ${profilePictureKey ? ", profilePicture = :profilePicture" : ""}
+        ${cropData ? ", cropData = :cropData" : ""}
   `;
 
   const expressionAttributeValues = {
@@ -104,7 +114,11 @@ exports.UpdateProfile = async (req, res) => {
   };
 
   if (profilePictureKey) {
-    expressionAttributeValues[":profilePicture"] = profilePictureKey; // Store the S3 key for the profile picture.
+    expressionAttributeValues[":profilePicture"] = profilePictureKey; // Profil resmi S3 anahtarı
+  }
+
+  if (cropData) {
+    expressionAttributeValues[":cropData"] = cropData; // Croplama bilgileri
   }
 
   const params = {
@@ -117,16 +131,13 @@ exports.UpdateProfile = async (req, res) => {
   };
 
   try {
-    // Update the user's record in DynamoDB
     const { Attributes } = await docClient.send(new UpdateCommand(params));
 
-    // Update the user in Stripe
     await stripe.customers.update(stripeCustomerId, {
       name: name,
       phone: phone,
     });
 
-    // Update the user's attributes in Cognito
     const cognitoParams = {
       UserAttributes: [
         { Name: "name", Value: name },
@@ -137,7 +148,7 @@ exports.UpdateProfile = async (req, res) => {
     };
     await cognito.adminUpdateUserAttributes(cognitoParams).promise();
 
-    res.status(200).json(Attributes); // Return the updated profile
+    res.status(200).json(Attributes);
   } catch (err) {
     console.error("Error updating profile:", err);
     res.status(500).json({ message: "Could not update profile" });
