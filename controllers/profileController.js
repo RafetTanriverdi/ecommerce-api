@@ -13,6 +13,7 @@ const { v4: uuidv4 } = require("uuid");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const client = new DynamoDBClient();
 const docClient = DynamoDBDocumentClient.from(client);
+
 const CUSTOMERS_TABLE = process.env.CUSTOMER_TABLE;
 
 const cognito = new CognitoIdentityServiceProvider();
@@ -32,7 +33,6 @@ exports.GetProfile = async (req, res) => {
       return res.status(404).json({ message: "Profile not found" });
     }
 
-    // Eğer profil resmi varsa, imzalı URL oluşturuyoruz
     if (Item.profilePicture) {
       const profilePictureUrl = await getSignedUrl(
         s3Client,
@@ -40,9 +40,9 @@ exports.GetProfile = async (req, res) => {
           Bucket: process.env.S3_BUCKET_NAME,
           Key: Item.profilePicture,
         }),
-        { expiresIn: 86400 } // 1 saat sonra süresi dolacak
+        { expiresIn: 86400 }
       );
-      Item.profilePictureUrl = profilePictureUrl; // Signed URL ekleniyor
+      Item.profilePictureUrl = profilePictureUrl;
     }
 
     res.status(200).json(Item);
@@ -52,7 +52,6 @@ exports.GetProfile = async (req, res) => {
   }
 };
 
-
 exports.UpdateProfile = async (req, res) => {
   const customerId = req.user.sub;
   const { name, email, phone, stripeCustomerId, profilePicture, cropData } =
@@ -60,16 +59,15 @@ exports.UpdateProfile = async (req, res) => {
 
   let profilePictureKey;
 
-  // Eğer profil resmi varsa, resmi S3'e yükle
   if (profilePicture) {
     if (profilePicture.startsWith("data:image/")) {
       const buffer = Buffer.from(
-        profilePicture.replace(/^data:image\/\w+;base64,/, ""), // base64 başlığını kaldırıyoruz
+        profilePicture.replace(/^data:image\/\w+;base64,/, ""),
         "base64"
       );
 
-      const fileExtension = "jpeg"; // JPEG olduğunu varsayıyoruz
-      const key = `profile-pictures/${customerId}.${fileExtension}`; // S3 anahtarı oluşturuyoruz
+      const fileExtension = "jpeg";
+      const key = `profile-pictures/${customerId}.${fileExtension}`;
 
       const s3Params = {
         Bucket: process.env.S3_BUCKET_NAME,
@@ -77,12 +75,12 @@ exports.UpdateProfile = async (req, res) => {
         Body: buffer,
         ContentEncoding: "base64",
         ContentType: `image/${fileExtension}`,
-        ACL: "private", // Görseli özel tutuyoruz
+        ACL: "private",
       };
 
       try {
-        await s3Client.send(new PutObjectCommand(s3Params)); // Resmi S3'e yüklüyoruz
-        profilePictureKey = key; // S3 anahtarını kaydediyoruz
+        await s3Client.send(new PutObjectCommand(s3Params));
+        profilePictureKey = key;
       } catch (err) {
         console.error("Error uploading profile picture:", err);
         return res
@@ -96,7 +94,6 @@ exports.UpdateProfile = async (req, res) => {
     }
   }
 
-  // Kullanıcı profilini DynamoDB'de güncelle
   const updateExpression = `
     SET #name = :name, 
         email = :email, 
@@ -114,11 +111,11 @@ exports.UpdateProfile = async (req, res) => {
   };
 
   if (profilePictureKey) {
-    expressionAttributeValues[":profilePicture"] = profilePictureKey; // Profil resmi S3 anahtarı
+    expressionAttributeValues[":profilePicture"] = profilePictureKey;
   }
 
   if (cropData) {
-    expressionAttributeValues[":cropData"] = cropData; // Croplama bilgileri
+    expressionAttributeValues[":cropData"] = cropData;
   }
 
   const params = {
@@ -155,68 +152,3 @@ exports.UpdateProfile = async (req, res) => {
   }
 };
 
-exports.UpdateAddress = async (req, res) => {
-  const customerId = req.user.sub;
-  const { action, address, addressId } = req.body;
-
-  let updateExpression = "";
-  let expressionAttributeValues = {};
-
-  if (action === "add") {
-    const newAddress = { ...address, addressId: uuidv4() };
-    updateExpression =
-      "SET addresses = list_append(if_not_exists(addresses, :emptyList), :newAddress)";
-    expressionAttributeValues = {
-      ":newAddress": [newAddress],
-      ":emptyList": [],
-    };
-  } else if (action === "update") {
-    updateExpression = "SET addresses = :updatedAddresses";
-    const existingAddresses = (
-      await docClient.send(
-        new GetCommand({
-          TableName: CUSTOMERS_TABLE,
-          Key: { customerId: customerId },
-        })
-      )
-    ).Item.addresses;
-
-    const updatedAddresses = existingAddresses.map((addr) =>
-      addr.addressId === addressId ? { ...addr, ...address } : addr
-    );
-
-    expressionAttributeValues = { ":updatedAddresses": updatedAddresses };
-  } else if (action === "delete") {
-    updateExpression = "SET addresses = :filteredAddresses";
-    const existingAddresses = (
-      await docClient.send(
-        new GetCommand({
-          TableName: CUSTOMERS_TABLE,
-          Key: { customerId: customerId },
-        })
-      )
-    ).Item.addresses;
-
-    const filteredAddresses = existingAddresses.filter(
-      (addr) => addr.addressId !== addressId
-    );
-
-    expressionAttributeValues = { ":filteredAddresses": filteredAddresses };
-  }
-
-  const params = {
-    TableName: CUSTOMERS_TABLE,
-    Key: { customerId: customerId },
-    UpdateExpression: updateExpression,
-    ExpressionAttributeValues: expressionAttributeValues,
-    ReturnValues: "UPDATED_NEW",
-  };
-
-  try {
-    const { Attributes } = await docClient.send(new UpdateCommand(params));
-    res.status(200).json(Attributes);
-  } catch (err) {
-    console.error("Error updating address:", err);
-    res.status(500).json({ message: "Could not update address" });
-  }
-};

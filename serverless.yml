@@ -101,12 +101,24 @@ functions:
           method: get
           cors: true
       - http:
-          path: profile
-          method: patch
+          path: address
+          method: put
           cors: true
       - http:
-          path: profile/address
-          method: Put
+          path: address/{addressId}
+          method: get
+          cors: true
+      - http:
+          path: address
+          method: get
+          cors: true
+      - http:
+          path: address/{addressId}
+          method: delete
+          cors: true
+      - http:
+          path: address
+          method: post
           cors: true
 
 resources:

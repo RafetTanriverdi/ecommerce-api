@@ -8,11 +8,12 @@ const ordersRoute = require("./routes/ordersRoute");
 const checkoutController = require("./controllers/checkoutController");
 const categoriesRoute = require("./routes/categoriesRoute");
 const profileRoute = require("./routes/profileRoute");
+const addressRoute = require("./routes/addressRoute"); 
 
 const app = express();
 
-app.use(bodyParser.json({ limit: '10mb' }));
-app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
+app.use(bodyParser.json({ limit: "10mb" }));
+app.use(bodyParser.urlencoded({ limit: "10mb", extended: true }));
 
 // CORS Middleware
 app.use((req, res, next) => {
@@ -31,7 +32,7 @@ app.use((req, res, next) => {
 // Webhook Route with express.raw middleware
 app.post(
   "/webhook",
-  express.raw({ type: 'application/json', limit: '10mb' }), 
+  express.raw({ type: "application/json", limit: "10mb" }),
   checkoutController.PostWebhook
 );
 
@@ -40,6 +41,7 @@ app.use("/checkout", checkoutRoute);
 app.use("/orders", ordersRoute);
 app.use("/categories", categoriesRoute);
 app.use("/profile", profileRoute);
+app.use("/address", addressRoute);
 
 app.use((req, res, next) => {
   return res.status(404).json({

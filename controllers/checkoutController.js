@@ -21,8 +21,9 @@ exports.PostCheckOutStripe = async (req, res) => {
       amount: amount,
       currency: "usd",
       customer: customer,
+      
       metadata: {
-        orderItems: JSON.stringify(orderedItems), // Store orderedItems in metadata
+        orderItems: JSON.stringify(orderedItems),
       },
       receipt_email: customerEmail,
     });
