@@ -48,7 +48,7 @@ exports.DeleteAddress = async (req, res) => {
 
 exports.UpdateAddress = async (req, res) => {
   const customerId = req.user.sub;
-  const { address } = req.body;
+  const { address } = req.body; 
   const { addressId } = req.params;
 
   try {
@@ -61,9 +61,17 @@ exports.UpdateAddress = async (req, res) => {
       )
     ).Item.addresses;
 
+    if (!existingAddresses || existingAddresses.length === 0) {
+      return res.status(404).json({ message: "No addresses found" });
+    }
+
+  
     const updatedAddresses = existingAddresses.map((addr) =>
-      addr.addressId === addressId ? { ...addr, ...address } : addr
+      addr.addressId === addressId
+        ? { ...addr, ...address } 
+        : { ...addr, isDefault: false } 
     );
+
 
     const params = {
       TableName: CUSTOMERS_TABLE,
@@ -82,6 +90,7 @@ exports.UpdateAddress = async (req, res) => {
     res.status(500).json({ message: "Could not update address" });
   }
 };
+
 
 exports.ListAddresses = async (req, res) => {
   const customerId = req.user.sub;

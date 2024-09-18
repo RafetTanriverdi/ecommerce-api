@@ -101,7 +101,7 @@ functions:
           method: get
           cors: true
       - http:
-          path: address
+          path: address/{addressId}
           method: put
           cors: true
       - http:

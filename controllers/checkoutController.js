@@ -21,7 +21,18 @@ exports.PostCheckOutStripe = async (req, res) => {
       amount: amount,
       currency: "usd",
       customer: customer,
-      
+      shipping:{
+        name: shippingAddress.name,
+        phone: shippingAddress.phone,
+        address:{
+          city: shippingAddress.city,
+          country: shippingAddress.country,
+          line1: shippingAddress.line1,
+          line2: shippingAddress.line2,
+          postal_code: shippingAddress.postal_code,
+          state: shippingAddress.state
+        }
+      },
       metadata: {
         orderItems: JSON.stringify(orderedItems),
       },
