@@ -10,7 +10,6 @@ const client = new DynamoDBClient();
 const docClient = DynamoDBDocumentClient.from(client);
 const ORDERS_TABLE = process.env.ORDERS_TABLE;
 
-// Sipariş ekleme işlemi
 exports.AddOrder = async (session) => {
   const orderData = {
     orderId: session.id,
@@ -55,7 +54,7 @@ exports.ListOrders = async (req, res) => {
 
 exports.GetOrder = async (req, res) => {
   const { orderId } = req.params;
-  const ownerId = req.user.sub; 
+  const ownerId = req.user.sub;
 
   try {
     const params = {
@@ -72,7 +71,9 @@ exports.GetOrder = async (req, res) => {
     }
 
     if (data.Item.ownerId !== ownerId) {
-      return res.status(403).json({ error: "You do not have access to this order" });
+      return res
+        .status(403)
+        .json({ error: "You do not have access to this order" });
     }
 
     res.status(200).json(data.Item);

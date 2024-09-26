@@ -14,24 +14,31 @@ const PRODUCTS_TABLE = process.env.PRODUCTS_TABLE;
 const ORDERS_TABLE = process.env.ORDERS_TABLE;
 
 exports.PostCheckOutStripe = async (req, res) => {
-  const { orderedItems, shippingAddress, customer, customerEmail, promoCode, amount } = req.body;
+  const {
+    orderedItems,
+    shippingAddress,
+    customer,
+    customerEmail,
+    promoCode,
+    amount,
+  } = req.body;
 
   try {
     const paymentIntent = await stripe.paymentIntents.create({
       amount: amount,
       currency: "usd",
       customer: customer,
-      shipping:{
+      shipping: {
         name: shippingAddress.name,
         phone: shippingAddress.phone,
-        address:{
+        address: {
           city: shippingAddress.city,
           country: shippingAddress.country,
           line1: shippingAddress.line1,
           line2: shippingAddress.line2,
           postal_code: shippingAddress.postal_code,
-          state: shippingAddress.state
-        }
+          state: shippingAddress.state,
+        },
       },
       metadata: {
         orderItems: JSON.stringify(orderedItems),
@@ -49,7 +56,7 @@ exports.PostCheckOutStripe = async (req, res) => {
 function removeUndefinedValues(obj) {
   if (Array.isArray(obj)) {
     return obj.map(removeUndefinedValues).filter((item) => item !== undefined);
-  } else if (typeof obj === 'object' && obj !== null) {
+  } else if (typeof obj === "object" && obj !== null) {
     return Object.entries(obj).reduce((acc, [key, value]) => {
       if (value !== undefined) {
         acc[key] = removeUndefinedValues(value);
@@ -74,7 +81,6 @@ exports.PostWebhook = async (req, res) => {
     case "payment_intent.succeeded":
       const paymentIntent = event.data.object;
 
-      // Retrieve the customer details based on the customer ID or email
       let customerData;
       const customerParams = {
         TableName: CUSTOMERS_TABLE,
@@ -85,8 +91,9 @@ exports.PostWebhook = async (req, res) => {
       };
 
       try {
-        const customerResponse = await docClient.send(new ScanCommand(customerParams));
-        console.log("Customer response:", customerResponse);
+        const customerResponse = await docClient.send(
+          new ScanCommand(customerParams)
+        );
         if (customerResponse.Items.length === 0) {
           console.error("Customer not found.");
           return res.status(404).json({ error: "Customer not found" });
@@ -99,16 +106,14 @@ exports.PostWebhook = async (req, res) => {
 
       let lineItems;
       try {
-        lineItems = paymentIntent.metadata.orderItems 
-          ? JSON.parse(paymentIntent.metadata.orderItems) 
+        lineItems = paymentIntent.metadata.orderItems
+          ? JSON.parse(paymentIntent.metadata.orderItems)
           : [];
-        console.log("Line items:", lineItems);
       } catch (err) {
         console.error("Error parsing line items:", err.message);
         return res.status(400).json({ error: "Invalid order items format" });
       }
 
-      // Fetch the products based on the provided productId and quantity
       const products = await Promise.all(
         lineItems.map(async (item) => {
           let productData;
@@ -120,7 +125,9 @@ exports.PostWebhook = async (req, res) => {
             },
           };
           try {
-            const productResponse = await docClient.send(new ScanCommand(productParams));
+            const productResponse = await docClient.send(
+              new ScanCommand(productParams)
+            );
             if (productResponse.Items.length === 0) {
               console.error("Product not found.");
               return null;
@@ -144,6 +151,10 @@ exports.PostWebhook = async (req, res) => {
 
       const filteredProducts = products.filter((product) => product !== null);
 
+      // Burada `newStatus`'ı tanımlıyoruz
+      const newStatus = "Order received";
+      const timestamp = new Date().toISOString();
+
       let orderData = {
         orderId: paymentIntent.id,
         customerId: customerData.customerId,
@@ -155,6 +166,25 @@ exports.PostWebhook = async (req, res) => {
         ownerId: customerData.customerId,
         createdAt: new Date().toISOString(),
         products: filteredProducts,
+        currentStatus: newStatus, // Burada newStatus'u kullanıyoruz
+        statusHistory: [
+          {
+            status: newStatus,
+            timestamp,
+          },
+        ],
+        shipping: {
+          name: paymentIntent.shipping.name,
+          phone: paymentIntent.shipping.phone,
+          address: {
+            city: paymentIntent.shipping.address.city,
+            country: paymentIntent.shipping.address.country,
+            line1: paymentIntent.shipping.address.line1,
+            line2: paymentIntent.shipping.address.line2,
+            postal_code: paymentIntent.shipping.address.postal_code,
+            state: paymentIntent.shipping.address.state,
+          },
+        },
       };
 
       orderData = removeUndefinedValues(orderData);
